@@ -1,0 +1,15 @@
+Untuk mengkompilasi library hev-socks5-tunnel (.so) atau jika Anda ingin mengunduhnya secara online (misalnya dari repository resmi heiher/hev-socks5-tunnel-android), berikut adalah struktur Package dan Class yang kini digunakan di aplikasi:
+
+Informasi Package dan Class di aplikasi Android:
+- Package Name: hev.socks5
+- Class Name: Tunnel
+
+Ini adalah struktur baku (standar) yang sama persis digunakan oleh **heiher/hev-socks5-tunnel-android**. Jadi Anda bisa langsung mengunduh file `libhev-socks5-tunnel.so` pre-compiled (yang sudah jadi) dari internet (contoh: GitHub releases) dan meletakkannya di folder `app/src/main/jniLibs/armeabi-v7a/` dan `app/src/main/jniLibs/arm64-v8a/` tanpa perlu membongkar kodenya.
+
+Sebagai referensi, jika Anda ingin membuatnya dari source code, Fungsi JNI (C/C++) yang harus ada adalah:
+
+1. Fungsi Main:
+JNIEXPORT jint JNICALL Java_hev_socks5_Tunnel_main(JNIEnv *env, jclass clazz, jstring configPath, jint tunFd)
+
+2. Fungsi Quit:
+JNIEXPORT void JNICALL Java_hev_socks5_Tunnel_quit(JNIEnv *env, jclass clazz)
