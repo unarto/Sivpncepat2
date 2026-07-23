@@ -13,6 +13,8 @@
 - [x] Refaktor total `MainActivity.kt` (4848 baris -> 85 baris) menjadi modul terpisah MVVM + Clean Architecture - [2026-07-22 18:36]
 - [x] Pindahkan `PANDUAN_REFACTOR.md` ke direktori root workspace - [2026-07-22 18:42]
 - [x] Audit dan pemetaan ukuran berkas source code untuk deteksi file gemuk - [2026-07-22 18:44]
+- [x] Hapus file `.github/workflows/build.yml` sesuai instruksi user - [2026-07-22 18:54]
+- [x] Tambah alur kerja `.github/workflows/gemini.yml` untuk AI Code Review - [2026-07-22 18:57]
 
 ## Pending Queue
 - [ ] Menunggu konfirmasi dan instruksi selanjutnya dari user.
