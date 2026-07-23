@@ -26,6 +26,9 @@
 - [x] Langkah 1: Refaktor `MainViewModel.kt` dan ekstraksi logika UI state dialog ke `DialogUiState.kt` & `DialogViewModel.kt`. - [2026-07-23 11:42]
 - [x] Langkah 2: Memecah komponen UI `MainScreen.kt` dan mengekstrak `MainScreenDialogs.kt` agar lebih bersih. - [2026-07-23 11:44]
 - [x] Langkah 3: Ekstraksi logika framing websocket ke `WebSocketFramer.kt` dan string parsing payload ke `PayloadFormatter.kt` dari file `PayloadInjector.kt`. - [2026-07-23 11:46]
+- [x] Memperbarui `Theme.kt` dan `Color.kt` menggunakan skema palet VPN modern (Deep Teal / Blue) dengan dukungan kompatibilitas Material 3 *dynamic color* - [2026-07-23 12:00]
+- [x] Menyempurnakan `VpnSettingsManager.kt` dengan internal string keys object, optimalisasi thread-safety MMKV, dan validasi nilai numerik secara komprehensif. - [2026-07-23 12:10]
+- [x] Melakukan Audit Fitur Jaringan Tingkat Lanjut (Advanced Networking Feature Audit) pada seluruh stack (`libssh2`, `mbedTLS`, `hev-socks5-tunnel`, `Android VpnService`) dan menambahkannya ke `AUDIT.md`. - [2026-07-23 13:50]
 
 ## Pending Queue
-- [ ] Menunggu instruksi lebih lanjut dari user terkait audit sistem maupun pengujian keseluruhan aplikasi.
+- [ ] Menunggu instruksi lanjutan dari user terkait integrasi layanan VPN atau penambahan fitur baru.
