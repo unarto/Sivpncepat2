@@ -15,11 +15,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sivpn.cepat.model.MainUiState
+import com.sivpn.cepat.model.DialogUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TopBar(
     uiState: MainUiState,
+    dialogState: DialogUiState,
     onRefreshIp: () -> Unit,
     onSplitTunnelingClick: () -> Unit,
     onKillSwitchClick: () -> Unit,
@@ -110,7 +112,7 @@ fun TopBar(
                 )
             }
             DropdownMenu(
-                expanded = uiState.showMenu,
+                expanded = dialogState.showMenu,
                 onDismissRequest = { onMenuToggle(false) }
             ) {
                 DropdownMenuItem(

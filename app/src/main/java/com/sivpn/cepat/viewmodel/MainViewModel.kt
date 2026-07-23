@@ -310,20 +310,6 @@ class MainViewModel(
         settingsRepository.setKillSwitchEnabled(enabled)
     }
 
-    // Dialog state handlers
-    fun setShowJniDownloader(show: Boolean) = _uiState.update { it.copy(showJniDownloader = show) }
-    fun setShowProfileDialog(show: Boolean) = _uiState.update { it.copy(showProfileDialog = show) }
-    fun setShowPayloadDialog(show: Boolean) = _uiState.update { it.copy(showPayloadDialog = show) }
-    fun setShowTlsDialog(show: Boolean) = _uiState.update { it.copy(showTlsDialog = show) }
-    fun setShowAddProfileDialog(show: Boolean) = _uiState.update { it.copy(showAddProfileDialog = show) }
-    fun setShowLogDialog(show: Boolean) = _uiState.update { it.copy(showLogDialog = show) }
-    fun setShowLimitDialog(show: Boolean) = _uiState.update { it.copy(showLimitDialog = show) }
-    fun setShowSplitTunnelingDialog(show: Boolean) = _uiState.update { it.copy(showSplitTunnelingDialog = show) }
-    fun setShowKillSwitchDialog(show: Boolean) = _uiState.update { it.copy(showKillSwitchDialog = show) }
-    fun setShowTetherDialog(show: Boolean) = _uiState.update { it.copy(showTetherDialog = show) }
-    fun setShowMenu(show: Boolean) = _uiState.update { it.copy(showMenu = show) }
-    fun setShowDnsDropdown(show: Boolean) = _uiState.update { it.copy(showDnsDropdown = show) }
-    fun toggleHevSocksExpanded() = _uiState.update { it.copy(isHevSocksExpanded = !it.isHevSocksExpanded) }
 
     // Clipboard & File import/export wrappers
     fun importFromClipboard(): Boolean {

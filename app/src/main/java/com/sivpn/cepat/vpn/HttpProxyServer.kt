@@ -1,21 +1,36 @@
 package com.sivpn.cepat.vpn
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Semaphore
 import java.io.*
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.SocketException
+import java.net.SocketTimeoutException
+import java.nio.ByteBuffer
+import java.nio.channels.Channels
 import java.util.*
+import java.util.concurrent.atomic.AtomicInteger
 
 object HttpProxyServer {
     private var serverSocket: ServerSocket? = null
-    private var serverJob: Job? = null
+    private var acceptJob: Job? = null
+    private val clientJobs = mutableListOf<Job>()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    private const val BUFFER_SIZE = 32 * 1024
+    private const val CONNECT_TIMEOUT_MS = 10_000
+    private const val IDLE_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+
+    private val connectionSemaphore = Semaphore(100)
+    private val activeConnections = AtomicInteger(0)
 
     @Volatile
     var isRunning = false
         private set
 
+    @Volatile
     var activePort = 8080
         private set
 
@@ -31,23 +46,24 @@ object HttpProxyServer {
         }
 
         isRunning = true
-        serverJob = scope.launch {
+        acceptJob = scope.launch {
             var portToTry = localBindPort.coerceIn(1, 65535)
             var success = false
 
             val maxPort = (portToTry + 10).coerceAtMost(65535)
             while (portToTry <= maxPort && !success && isRunning) {
                 try {
-                     serverSocket = ServerSocket()
-                     serverSocket?.reuseAddress = true
-                     serverSocket?.bind(InetSocketAddress("0.0.0.0", portToTry))
-                     activePort = portToTry
-                     success = true
-                     LogManager.addLog("[Hotshare HTTP] Server aktif di 0.0.0.0:$activePort -> SOCKS5 $socksHost:$socksPort")
-                     HotshareWakeLockManager.acquire(context)
+                    serverSocket = ServerSocket()
+                    serverSocket?.reuseAddress = true
+                    serverSocket?.bind(InetSocketAddress("0.0.0.0", portToTry))
+                    serverSocket?.soTimeout = 1000 // Timeout untuk stop responsif
+                    activePort = portToTry
+                    success = true
+                    LogManager.addLog("[Hotshare HTTP] Server aktif di 0.0.0.0:$activePort -> SOCKS5 $socksHost:$socksPort")
+                    HotshareWakeLockManager.acquire(context)
                 } catch (e: Exception) {
-                     LogManager.addLog("[Hotshare HTTP] Gagal menggunakan port $portToTry: ${e.message}. Mencoba port berikutnya...")
-                     portToTry++
+                    LogManager.addLog("[Hotshare HTTP] Gagal menggunakan port $portToTry: ${e.message}. Mencoba port berikutnya...")
+                    portToTry++
                 }
             }
 
@@ -59,29 +75,74 @@ object HttpProxyServer {
 
             try {
                 while (isRunning) {
-                    val clientSocket = serverSocket?.accept() ?: break
-                    launch {
-                        handleClient(clientSocket, socksHost, socksPort)
+                    var clientSocket: Socket? = null
+                    try {
+                        clientSocket = serverSocket?.accept()
+                    } catch (e: SocketTimeoutException) {
+                        continue
+                    } catch (e: SocketException) {
+                        break
+                    } catch (e: IOException) {
+                        if (isRunning) {
+                            LogManager.addLog("[Hotshare HTTP] Accept error: ${e.message}")
+                        }
+                        break
+                    } catch (e: Exception) {
+                        break
+                    }
+
+                    if (clientSocket != null) {
+                        if (connectionSemaphore.tryAcquire()) {
+                            val job = launch {
+                                try {
+                                    handleClient(clientSocket, socksHost, socksPort)
+                                } finally {
+                                    connectionSemaphore.release()
+                                }
+                            }
+                            synchronized(clientJobs) {
+                                clientJobs.add(job)
+                            }
+                            job.invokeOnCompletion {
+                                synchronized(clientJobs) {
+                                    clientJobs.remove(job)
+                                }
+                            }
+                        } else {
+                            LogManager.addLog("[Hotshare HTTP] Batas maksimum 100 koneksi tercapai. Menolak klien baru.")
+                            gracefulClose(clientSocket)
+                        }
                     }
                 }
-            } catch (e: Exception) {
-                if (isRunning) {
-                    LogManager.addLog("[Hotshare HTTP] Server error: ${e.message}")
+            } finally {
+                isRunning = false
+                closeServerSocket()
+                if (!LocalPortForwarder.isRunning) {
+                    HotshareWakeLockManager.release()
                 }
             }
         }
     }
 
-    private suspend fun handleClient(clientSocket: Socket, socksHost: String, socksPort: Int) = withContext(Dispatchers.IO) {
+    private suspend fun handleClient(clientSocket: Socket, socksHost: String, socksPort: Int) = coroutineScope {
+        val startTime = System.currentTimeMillis()
         var socksSocket: Socket? = null
+        val clientIp = clientSocket.inetAddress?.hostAddress ?: "unknown"
+        val count = activeConnections.incrementAndGet()
+        
         try {
-            val clientIp = clientSocket.inetAddress?.hostAddress
             HotshareClientManager.registerClientActivity(clientIp)
+
+            clientSocket.tcpNoDelay = true
+            clientSocket.keepAlive = true
+            clientSocket.soTimeout = IDLE_TIMEOUT_MS
+            clientSocket.receiveBufferSize = BUFFER_SIZE
+            clientSocket.sendBufferSize = BUFFER_SIZE
 
             val clientIn = clientSocket.getInputStream()
             val clientOut = clientSocket.getOutputStream()
 
-            // Read headers byte-by-byte until \r\n\r\n to prevent body data loss
+            // Read headers byte-by-byte until \r\n\r\n
             val headerBuffer = ByteArrayOutputStream()
             var state = 0
             while (true) {
@@ -101,11 +162,11 @@ object HttpProxyServer {
 
             val headersStr = headerBuffer.toString("ISO-8859-1")
             val lines = headersStr.split("\r\n")
-            if (lines.isEmpty() || lines[0].isEmpty()) return@withContext
+            if (lines.isEmpty() || lines[0].isEmpty()) return@coroutineScope
 
             val firstLine = lines[0]
             val tokens = StringTokenizer(firstLine)
-            if (tokens.countTokens() < 2) return@withContext
+            if (tokens.countTokens() < 2) return@coroutineScope
 
             val method = tokens.nextToken()
             val url = tokens.nextToken()
@@ -132,7 +193,7 @@ object HttpProxyServer {
             if (targetHost.isBlank()) {
                 clientOut.write("HTTP/1.1 400 Bad Request\r\n\r\n".toByteArray())
                 clientOut.flush()
-                return@withContext
+                return@coroutineScope
             }
 
             try {
@@ -140,11 +201,19 @@ object HttpProxyServer {
             } catch (e: Exception) {
                 LogManager.addLog("[Hotshare HTTP] Gagal koneksi SOCKS5 ke $targetHost:$targetPort - ${e.message}")
                 if (isConnect) {
-                    clientOut.write("HTTP/1.1 502 Bad Gateway\r\n\r\n".toByteArray())
-                    clientOut.flush()
+                    try {
+                        clientOut.write("HTTP/1.1 502 Bad Gateway\r\n\r\n".toByteArray())
+                        clientOut.flush()
+                    } catch (e: Exception) {}
                 }
-                return@withContext
+                return@coroutineScope
             }
+
+            socksSocket.tcpNoDelay = true
+            socksSocket.keepAlive = true
+            socksSocket.soTimeout = IDLE_TIMEOUT_MS
+            socksSocket.receiveBufferSize = BUFFER_SIZE
+            socksSocket.sendBufferSize = BUFFER_SIZE
 
             val socksOut = socksSocket.getOutputStream()
             val socksIn = socksSocket.getInputStream()
@@ -157,16 +226,51 @@ object HttpProxyServer {
                 socksOut.flush()
             }
 
-            // Bi-directional stream pipe
-            val clientToSocks = launch { pipeStream(clientIn, socksOut) }
-            val socksToClient = launch { pipeStream(socksIn, clientOut) }
+            val bufferPool1 = ByteBuffer.allocateDirect(BUFFER_SIZE)
+            val bufferPool2 = ByteBuffer.allocateDirect(BUFFER_SIZE)
+
+            val clientToSocks = launch { 
+                try {
+                    pipeStream(clientIn, socksOut, bufferPool1)
+                } catch (e: EOFException) {
+                } catch (e: SocketException) {
+                } catch (e: SocketTimeoutException) {
+                    LogManager.addLog("[Hotshare HTTP] Client -> Socks Timeout: ${e.message}")
+                } catch (e: IOException) {
+                } catch (e: CancellationException) {
+                }
+            }
+            val socksToClient = launch { 
+                try {
+                    pipeStream(socksIn, clientOut, bufferPool2)
+                } catch (e: EOFException) {
+                } catch (e: SocketException) {
+                } catch (e: SocketTimeoutException) {
+                    LogManager.addLog("[Hotshare HTTP] Socks -> Client Timeout: ${e.message}")
+                } catch (e: IOException) {
+                } catch (e: CancellationException) {
+                }
+            }
+
+            clientToSocks.invokeOnCompletion { socksToClient.cancel() }
+            socksToClient.invokeOnCompletion { clientToSocks.cancel() }
 
             joinAll(clientToSocks, socksToClient)
+
+        } catch (e: CancellationException) {
+            // Ignored
+        } catch (e: SocketTimeoutException) {
+            LogManager.addLog("[Hotshare HTTP] Koneksi Timeout (Idle): $clientIp")
+        } catch (e: SocketException) {
+            // LogManager.addLog("[Hotshare HTTP] Koneksi Socket terputus: $clientIp")
+        } catch (e: EOFException) {
+            // LogManager.addLog("[Hotshare HTTP] Koneksi EOF: $clientIp")
         } catch (e: Exception) {
-            // closed connections
+            LogManager.addLog("[Hotshare HTTP] Error dari $clientIp: ${e.message}")
         } finally {
-            try { clientSocket.close() } catch (e: Exception) {}
-            try { socksSocket?.close() } catch (e: Exception) {}
+            gracefulClose(clientSocket)
+            gracefulClose(socksSocket)
+            activeConnections.decrementAndGet()
         }
     }
 
@@ -216,7 +320,7 @@ object HttpProxyServer {
 
     private fun connectViaSocks5(socksHost: String, socksPort: Int, targetHost: String, targetPort: Int): Socket {
         val socket = Socket()
-        socket.connect(InetSocketAddress(socksHost, socksPort), 10000)
+        socket.connect(InetSocketAddress(socksHost, socksPort), CONNECT_TIMEOUT_MS)
         val out = DataOutputStream(socket.getOutputStream())
         val inStream = DataInputStream(socket.getInputStream())
 
@@ -273,45 +377,68 @@ object HttpProxyServer {
         return socket
     }
 
-    private fun pipeStream(input: InputStream, output: OutputStream) {
+    private fun pipeStream(input: InputStream, output: OutputStream, buffer: ByteBuffer) {
         var inputChannel: java.nio.channels.ReadableByteChannel? = null
         var outputChannel: java.nio.channels.WritableByteChannel? = null
         try {
-            inputChannel = java.nio.channels.Channels.newChannel(input)
-            outputChannel = java.nio.channels.Channels.newChannel(output)
-            val buffer = java.nio.ByteBuffer.allocateDirect(32768)
+            inputChannel = Channels.newChannel(input)
+            outputChannel = Channels.newChannel(output)
             
             while (inputChannel.read(buffer) != -1) {
                 buffer.flip()
-                outputChannel.write(buffer)
-                buffer.compact()
+                while (buffer.hasRemaining()) {
+                    outputChannel.write(buffer)
+                }
+                buffer.clear()
             }
-            buffer.flip()
-            while (buffer.hasRemaining()) {
-                outputChannel.write(buffer)
-            }
-        } catch (e: Exception) {
-            // expected
         } finally {
-            try { inputChannel?.close() } catch (e: Exception) {}
-            try { outputChannel?.close() } catch (e: Exception) {}
-            try { input.close() } catch (e: Exception) {}
-            try { output.close() } catch (e: Exception) {}
+            // Do not close socket streams here; handled by gracefulClose in handleClient
         }
     }
 
+    private fun gracefulClose(socket: Socket?) {
+        if (socket == null || socket.isClosed) return
+        try {
+            if (!socket.isInputShutdown) socket.shutdownInput()
+        } catch (e: Exception) {}
+        try {
+            if (!socket.isOutputShutdown) socket.shutdownOutput()
+        } catch (e: Exception) {}
+        try {
+            socket.close()
+        } catch (e: Exception) {}
+    }
+
     fun stop() {
+        if (!isRunning) return
         isRunning = false
+        closeServerSocket()
+        
+        val aJob = acceptJob
+        acceptJob = null
+        
+        val jobsToCancel = synchronized(clientJobs) {
+            clientJobs.toList()
+        }
+        
+        scope.launch {
+            aJob?.cancelAndJoin()
+            jobsToCancel.forEach { it.cancel() }
+            jobsToCancel.forEach { it.join() }
+            
+            LogManager.addLog("[Hotshare HTTP] Server dihentikan.")
+            if (!LocalPortForwarder.isRunning) {
+                HotshareWakeLockManager.release()
+            }
+        }
+    }
+
+    private fun closeServerSocket() {
         try {
             serverSocket?.close()
-        } catch (e: Exception) {}
-        serverSocket = null
-        serverJob?.cancel()
-        serverJob = null
-        LogManager.addLog("[Hotshare HTTP] Server dihentikan.")
-        
-        if (!HttpProxyServer.isRunning && !LocalPortForwarder.isRunning) {
-            HotshareWakeLockManager.release()
+        } catch (_: Exception) {
+        } finally {
+            serverSocket = null
         }
     }
 }

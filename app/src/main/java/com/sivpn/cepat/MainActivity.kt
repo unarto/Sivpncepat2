@@ -15,6 +15,8 @@ import com.sivpn.cepat.vpn.LogManager
 import com.sivpn.cepat.vpn.VpnController
 import com.sivpn.cepat.viewmodel.MainViewModel
 import com.sivpn.cepat.viewmodel.MainViewModelFactory
+import com.sivpn.cepat.viewmodel.DialogViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 class MainActivity : ComponentActivity() {
 
@@ -63,6 +65,7 @@ class MainActivity : ComponentActivity() {
             MyApplicationTheme(darkTheme = darkTheme) {
                 MainScreen(
                     viewModel = viewModel,
+                    dialogViewModel = viewModel(),
                     onConnect = {
                         vpnController.prepareAndStartVpn(
                             activity = this@MainActivity,

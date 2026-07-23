@@ -17,6 +17,15 @@
 - [x] Tambah alur kerja `.github/workflows/gemini.yml` untuk AI Code Review - [2026-07-22 18:57]
 - [x] Refaktor total `SiVpnService.kt` (755 baris -> 366 baris) dengan memisahkan logika ke `VpnNotificationManager`, `VpnInterfaceConfigurator`, `VpnMonitors`, dan `HevTunnelConfigurator` - [2026-07-23 02:51]
 - [x] Refaktor total `VpnSettingsManager.kt` (650 baris -> 133 baris) dengan memisahkan fungsi ekspor/impor JSON ke `ConfigRepository` dan memadatkan getters/setters. - [2026-07-23 02:56]
+- [x] Refaktor total `PayloadInjector.kt` menjadi professional WebSocket Injector dengan native WS/WSS Framing RFC6455 dan state TCP yang solid. - [2026-07-23 10:31]
+- [x] Refaktor `LocalPortForwarder.kt` untuk optimalisasi TCP, zero leak, pembatas koneksi, logging, dan graceful shutdown. - [2026-07-23 10:49]
+- [x] Audit mendalam dan perbaikan bug race condition di `LocalPortForwarder.kt` (invokeOnCompletion koordinasi coroutine). - [2026-07-23 11:03]
+- [x] Refaktor total `PayloadInjector.kt` dengan validasi RFC6455 ketat, optimasi WebSocket, error handling dan stabilitas TCP. - [2026-07-23 11:13]
+- [x] Refaktor `HttpProxyServer.kt` untuk optimalisasi TCP, zero leak, pembatas koneksi, logging, dan graceful shutdown. - [2026-07-23 11:25]
+- [x] Audit ulang ukuran file & pembuatan rencana refaktor terukur (RSP) - [2026-07-23 11:38]
+- [x] Langkah 1: Refaktor `MainViewModel.kt` dan ekstraksi logika UI state dialog ke `DialogUiState.kt` & `DialogViewModel.kt`. - [2026-07-23 11:42]
+- [x] Langkah 2: Memecah komponen UI `MainScreen.kt` dan mengekstrak `MainScreenDialogs.kt` agar lebih bersih. - [2026-07-23 11:44]
+- [x] Langkah 3: Ekstraksi logika framing websocket ke `WebSocketFramer.kt` dan string parsing payload ke `PayloadFormatter.kt` dari file `PayloadInjector.kt`. - [2026-07-23 11:46]
 
 ## Pending Queue
-- [ ] Menunggu konfirmasi dan instruksi selanjutnya dari user.
+- [ ] Menunggu instruksi lebih lanjut dari user terkait audit sistem maupun pengujian keseluruhan aplikasi.

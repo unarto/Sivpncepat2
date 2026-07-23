@@ -19,15 +19,18 @@ import com.sivpn.cepat.repository.LogRepository
 import com.sivpn.cepat.ui.components.*
 import com.sivpn.cepat.ui.dialogs.*
 import com.sivpn.cepat.viewmodel.MainViewModel
+import com.sivpn.cepat.viewmodel.DialogViewModel
 
 @Composable
 fun MainScreen(
     viewModel: MainViewModel,
+    dialogViewModel: DialogViewModel,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val dialogState by dialogViewModel.dialogState.collectAsStateWithLifecycle()
     val logs by LogRepository().logs.collectAsStateWithLifecycle()
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -85,13 +88,14 @@ fun MainScreen(
             topBar = {
                 TopBar(
                     uiState = uiState,
+                    dialogState = dialogState,
                     onRefreshIp = { viewModel.restartPublicIpMonitor() },
-                    onSplitTunnelingClick = { viewModel.setShowSplitTunnelingDialog(true) },
-                    onKillSwitchClick = { viewModel.setShowKillSwitchDialog(true) },
-                    onTetherClick = { viewModel.setShowTetherDialog(true) },
-                    onLogClick = { viewModel.setShowLogDialog(true) },
-                    onMenuToggle = { show -> viewModel.setShowMenu(show) },
-                    onAddProfileClick = { viewModel.setShowAddProfileDialog(true) },
+                    onSplitTunnelingClick = { dialogViewModel.setShowSplitTunnelingDialog(true) },
+                    onKillSwitchClick = { dialogViewModel.setShowKillSwitchDialog(true) },
+                    onTetherClick = { dialogViewModel.setShowTetherDialog(true) },
+                    onLogClick = { dialogViewModel.setShowLogDialog(true) },
+                    onMenuToggle = { show -> dialogViewModel.setShowMenu(show) },
+                    onAddProfileClick = { dialogViewModel.setShowAddProfileDialog(true) },
                     onDeleteProfileClick = {
                         if (!viewModel.deleteCurrentProfile()) {
                             Toast.makeText(context, "Tidak dapat menghapus profile terakhir!", Toast.LENGTH_SHORT).show()
@@ -132,7 +136,7 @@ fun MainScreen(
                     JniWarningCard(
                         isNativeSshLoadedState = uiState.isNativeSshLoadedState,
                         isHevLoadedState = uiState.isHevLoadedState,
-                        onDownloadClick = { viewModel.setShowJniDownloader(true) }
+                        onDownloadClick = { dialogViewModel.setShowJniDownloader(true) }
                     )
 
                     SectionHeader("CONTROLLER")
@@ -144,7 +148,7 @@ fun MainScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     StatusCard(
                         uiState = uiState,
-                        onSetTimeLimitClick = { viewModel.setShowLimitDialog(true) }
+                        onSetTimeLimitClick = { dialogViewModel.setShowLimitDialog(true) }
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -152,19 +156,19 @@ fun MainScreen(
 
                     ProfileCard(
                         currentProfile = uiState.currentProfile,
-                        onProfileClick = { viewModel.setShowProfileDialog(true) }
+                        onProfileClick = { dialogViewModel.setShowProfileDialog(true) }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
                     PayloadCard(
                         payload = uiState.payload,
-                        onPayloadClick = { viewModel.setShowPayloadDialog(true) }
+                        onPayloadClick = { dialogViewModel.setShowPayloadDialog(true) }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
                     ProxyCard(
                         proxyFullInput = uiState.proxyFullInput,
-                        onProxyClick = { viewModel.setShowTlsDialog(true) }
+                        onProxyClick = { dialogViewModel.setShowTlsDialog(true) }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -172,13 +176,13 @@ fun MainScreen(
                         sshHost = uiState.sshHost,
                         sshPort = uiState.sshPort,
                         sshUsername = uiState.sshUsername,
-                        onSshClick = { viewModel.setShowAddProfileDialog(true) }
+                        onSshClick = { dialogViewModel.setShowAddProfileDialog(true) }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
                     DnsCard(
                         dns = uiState.dns,
-                        onDnsClick = { viewModel.setShowDnsDropdown(true) }
+                        onDnsClick = { dialogViewModel.setShowDnsDropdown(true) }
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -187,108 +191,35 @@ fun MainScreen(
                     SplitTunnelingCard(
                         enabled = uiState.splitTunnelingEnabled,
                         bypassCount = uiState.bypassApps.size,
-                        onClick = { viewModel.setShowSplitTunnelingDialog(true) }
+                        onClick = { dialogViewModel.setShowSplitTunnelingDialog(true) }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
                     KillSwitchCard(
                         enabled = uiState.killSwitchEnabled,
-                        onClick = { viewModel.setShowKillSwitchDialog(true) }
+                        onClick = { dialogViewModel.setShowKillSwitchDialog(true) }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
                     LogCard(
                         lastLog = logs.lastOrNull() ?: "",
-                        onClick = { viewModel.setShowLogDialog(true) }
+                        onClick = { dialogViewModel.setShowLogDialog(true) }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
                     SettingsCard(
-                        onClick = { viewModel.setShowLimitDialog(true) }
+                        onClick = { dialogViewModel.setShowLimitDialog(true) }
                     )
                 }
             }
         }
 
-        // Active Dialogs rendering
-        if (uiState.showPayloadDialog) {
-            PayloadDialog(
-                initialPayload = uiState.payload,
-                onDismiss = { viewModel.setShowPayloadDialog(false) },
-                onSave = { newPayload -> viewModel.updatePayload(newPayload) }
-            )
-        }
-        if (uiState.showProfileDialog) {
-            ProfileDialog(
-                currentProfile = uiState.currentProfile,
-                profileList = uiState.profileList,
-                onDismiss = { viewModel.setShowProfileDialog(false) },
-                onSelectProfile = { profile -> viewModel.selectProfile(profile) },
-                onAddProfileClick = { viewModel.setShowAddProfileDialog(true) }
-            )
-        }
-        if (uiState.showAddProfileDialog) {
-            SshDialog(
-                initialSshFullInput = uiState.sshFullInput,
-                onDismiss = { viewModel.setShowAddProfileDialog(false) },
-                onSave = { input -> viewModel.updateSshFullInput(input) }
-            )
-        }
-        if (uiState.showTlsDialog) {
-            ProxyDialog(
-                initialProxyFullInput = uiState.proxyFullInput,
-                onDismiss = { viewModel.setShowTlsDialog(false) },
-                onSave = { input -> viewModel.updateProxyFullInput(input) }
-            )
-        }
-        if (uiState.showLogDialog) {
-            LogDialog(
-                logs = logs,
-                onDismiss = { viewModel.setShowLogDialog(false) }
-            )
-        }
-        if (uiState.showSplitTunnelingDialog) {
-            SplitTunnelDialog(
-                initialEnabled = uiState.splitTunnelingEnabled,
-                initialFilterMode = uiState.appsFilterMode,
-                initialBypassApps = uiState.bypassApps,
-                onDismiss = { viewModel.setShowSplitTunnelingDialog(false) },
-                onSave = { enabled, mode, apps -> viewModel.updateSplitTunneling(enabled, mode, apps) }
-            )
-        }
-        if (uiState.showKillSwitchDialog) {
-            AlertDialog(
-                onDismissRequest = { viewModel.setShowKillSwitchDialog(false) },
-                title = { Text("Kill Switch") },
-                text = { Text("Aktifkan Kill Switch untuk memblokir seluruh koneksi internet ketika VPN terputus secara tidak terduga.") },
-                confirmButton = {
-                    Button(onClick = {
-                        viewModel.updateKillSwitch(!uiState.killSwitchEnabled)
-                        viewModel.setShowKillSwitchDialog(false)
-                    }) {
-                        Text(if (uiState.killSwitchEnabled) "Nonaktifkan" else "Aktifkan")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { viewModel.setShowKillSwitchDialog(false) }) {
-                        Text("Batal")
-                    }
-                }
-            )
-        }
-        if (uiState.showLimitDialog) {
-            SettingsDialog(
-                uiState = uiState,
-                onDismiss = { viewModel.setShowLimitDialog(false) },
-                onKeepAliveChange = { sec -> },
-                onAutoCleanLogsChange = { enabled, mins, maxLines -> }
-            )
-        }
-        if (uiState.showTetherDialog) {
-            TetherDialog(onDismiss = { viewModel.setShowTetherDialog(false) })
-        }
-        if (uiState.showJniDownloader) {
-            JniDownloaderDialog(onDismiss = { viewModel.setShowJniDownloader(false) })
-        }
+        MainScreenDialogs(
+            uiState = uiState,
+            dialogState = dialogState,
+            viewModel = viewModel,
+            dialogViewModel = dialogViewModel,
+            logs = logs
+        )
     }
 }
