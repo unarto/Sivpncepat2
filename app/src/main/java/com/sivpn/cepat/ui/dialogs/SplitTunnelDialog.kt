@@ -32,10 +32,10 @@ data class AppItem(
 @Composable
 fun SplitTunnelDialog(
     initialEnabled: Boolean,
-    initialFilterMode: Int,
+    initialFilterMode: String,
     initialBypassApps: Set<String>,
     onDismiss: () -> Unit,
-    onSave: (Boolean, Int, Set<String>) -> Unit
+    onSave: (Boolean, String, Set<String>) -> Unit
 ) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(initialEnabled) }
@@ -97,13 +97,13 @@ fun SplitTunnelDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         FilterChip(
-                            selected = filterMode == 0,
-                            onClick = { filterMode = 0 },
+                            selected = filterMode == "bypass",
+                            onClick = { filterMode = "bypass" },
                             label = { Text("Bypass Terpilih", fontSize = 11.sp) }
                         )
                         FilterChip(
-                            selected = filterMode == 1,
-                            onClick = { filterMode = 1 },
+                            selected = filterMode == "filter",
+                            onClick = { filterMode = "filter" },
                             label = { Text("Hanya Lewatkan Terpilih", fontSize = 11.sp) }
                         )
                     }

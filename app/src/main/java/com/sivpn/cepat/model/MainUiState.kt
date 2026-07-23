@@ -24,10 +24,10 @@ data class MainUiState(
 
     // VPN Feature States
     val splitTunnelingEnabled: Boolean = false,
-    val appsFilterMode: Int = 0,
+    val appsFilterMode: String = "bypass",
     val bypassApps: Set<String> = emptySet(),
     val killSwitchEnabled: Boolean = false,
-    val forcingTls: Boolean = false,
+    val forcingTls: String = "1.2",
     val speedometerEnabled: Boolean = true,
     val autoReconnectEnabled: Boolean = true,
     val ipAutoRefreshEnabled: Boolean = true,

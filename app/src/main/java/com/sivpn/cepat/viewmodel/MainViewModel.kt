@@ -292,7 +292,7 @@ class MainViewModel(
         logRepository.addLog("Speedometer Real-time: $enabled")
     }
 
-    fun updateSplitTunneling(enabled: Boolean, mode: Int, apps: Set<String>) {
+    fun updateSplitTunneling(enabled: Boolean, mode: String, apps: Set<String>) {
         _uiState.update {
             it.copy(
                 splitTunnelingEnabled = enabled,

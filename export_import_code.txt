@@ -1,0 +1,141 @@
+    fun exportConfigAsJson(context: Context): String {
+        val json = org.json.JSONObject()
+        json.put("ssh_host", getSshHost(context))
+        json.put("ssh_port", getSshPort(context))
+        json.put("ssh_username", getSshUsername(context))
+        json.put("ssh_password", getSshPassword(context))
+        json.put("payload", getPayload(context))
+        json.put("proxy_host", getProxyHost(context))
+        json.put("proxy_port", getProxyPort(context))
+        json.put("sni", getSni(context))
+        json.put("dns", getDns(context))
+        json.put("udpgw", getUdpgw(context))
+        json.put("auto_ping", getAutoPing(context))
+        json.put("forcing_tls", getForcingTls(context))
+        json.put("connection_limit_minutes", getConnectionLimitMinutes(context))
+        json.put("connection_limit_enabled", getConnectionLimitEnabled(context))
+        json.put("ping_address", getPingAddress(context))
+        json.put("split_tunneling_enabled", getSplitTunnelingEnabled(context))
+        json.put("apps_filter_mode", getAppsFilterMode(context))
+        json.put("kill_switch_enabled", getKillSwitchEnabled(context))
+        json.put("speedometer_enabled", getSpeedometerEnabled(context))
+        json.put("hotshare_socks_port", getHotshareSocksPort(context))
+        json.put("hotshare_http_port", getHotshareHttpPort(context))
+        json.put("ip_auto_refresh_enabled", getIpAutoRefreshEnabled(context))
+        json.put("ip_auto_refresh_interval", getIpAutoRefreshInterval(context))
+        json.put("hotshare_wakelock_enabled", getHotshareWakeLockEnabled(context))
+        json.put("vpn_wakelock_enabled", getVpnWakeLockEnabled(context))
+        json.put("keep_alive_interval", getKeepAliveInterval(context))
+        json.put("auto_clean_logs_enabled", getAutoCleanLogsEnabled(context))
+        json.put("auto_clean_logs_interval", getAutoCleanInterval(context))
+        json.put("max_log_lines", getMaxLogLines(context))
+
+        // HevSocks configs
+        json.put("hev_mtu", getHevMtu(context))
+        json.put("hev_multi_queue", getHevMultiQueue(context))
+        json.put("hev_ipv4", getHevIpv4(context))
+        json.put("hev_ipv6", getHevIpv6(context))
+        json.put("hev_dns_port", getHevDnsPort(context))
+        json.put("hev_dns_address", getHevDnsAddress(context))
+        json.put("hev_socks5_port", getHevSocks5Port(context))
+        json.put("hev_socks5_address", getHevSocks5Address(context))
+        json.put("hev_socks5_udp", getHevSocks5Udp(context))
+        json.put("hev_task_stack_size", getHevTaskStackSize(context))
+        json.put("hev_tcp_buffer_size", getHevTcpBufferSize(context))
+        json.put("hev_udp_recv_buffer_size", getHevUdpRecvBufferSize(context))
+        json.put("hev_udp_copy_buffer_nums", getHevUdpCopyBufferNums(context))
+        json.put("hev_max_session_count", getHevMaxSessionCount(context))
+        json.put("hev_connect_timeout", getHevConnectTimeout(context))
+        json.put("hev_tcp_read_write_timeout", getHevTcpReadWriteTimeout(context))
+        json.put("hev_udp_read_write_timeout", getHevUdpReadWriteTimeout(context))
+        json.put("hev_log_file", getHevLogFile(context))
+        json.put("hev_log_level", getHevLogLevel(context))
+
+        val bypassAppsJson = org.json.JSONArray()
+        getBypassApps(context).forEach { bypassAppsJson.put(it) }
+        json.put("bypass_apps_list", bypassAppsJson)
+
+        val jsonString = json.toString()
+        val base64Encoded = android.util.Base64.encodeToString(jsonString.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
+        return "SIVPN://" + base64Encoded
+    }
+
+    fun importConfigFromJson(context: Context, encodedString: String): Boolean {
+        return try {
+            val contentToDecode = if (encodedString.startsWith("SIVPN://")) {
+                encodedString.substring("SIVPN://".length)
+            } else {
+                encodedString
+            }
+            // Allow backward compatibility with plain JSON string
+            val jsonString = if (contentToDecode.trim().startsWith("{")) {
+                contentToDecode
+            } else {
+                val decodedBytes = android.util.Base64.decode(contentToDecode, android.util.Base64.DEFAULT)
+                String(decodedBytes, Charsets.UTF_8)
+            }
+            val json = org.json.JSONObject(jsonString)
+            if (json.has("ssh_host")) setSshHost(context, json.getString("ssh_host"))
+            if (json.has("ssh_port")) setSshPort(context, json.getInt("ssh_port"))
+            if (json.has("ssh_username")) setSshUsername(context, json.getString("ssh_username"))
+            if (json.has("ssh_password")) setSshPassword(context, json.getString("ssh_password"))
+            if (json.has("payload")) setPayload(context, json.getString("payload"))
+            if (json.has("proxy_host")) setProxyHost(context, json.getString("proxy_host"))
+            if (json.has("proxy_port")) setProxyPort(context, json.getInt("proxy_port"))
+            if (json.has("sni")) setSni(context, json.getString("sni"))
+            if (json.has("dns")) setDns(context, json.getString("dns"))
+            if (json.has("udpgw")) setUdpgw(context, json.getString("udpgw"))
+            if (json.has("auto_ping")) setAutoPing(context, json.getBoolean("auto_ping"))
+            if (json.has("forcing_tls")) setForcingTls(context, json.getString("forcing_tls"))
+            if (json.has("connection_limit_minutes")) setConnectionLimitMinutes(context, json.getInt("connection_limit_minutes"))
+            if (json.has("connection_limit_enabled")) setConnectionLimitEnabled(context, json.getBoolean("connection_limit_enabled"))
+            if (json.has("ping_address")) setPingAddress(context, json.getString("ping_address"))
+            if (json.has("split_tunneling_enabled")) setSplitTunnelingEnabled(context, json.getBoolean("split_tunneling_enabled"))
+            if (json.has("apps_filter_mode")) setAppsFilterMode(context, json.getString("apps_filter_mode"))
+            if (json.has("kill_switch_enabled")) setKillSwitchEnabled(context, json.getBoolean("kill_switch_enabled"))
+            if (json.has("speedometer_enabled")) setSpeedometerEnabled(context, json.getBoolean("speedometer_enabled"))
+            if (json.has("hotshare_socks_port")) setHotshareSocksPort(context, json.getInt("hotshare_socks_port"))
+            if (json.has("hotshare_http_port")) setHotshareHttpPort(context, json.getInt("hotshare_http_port"))
+            if (json.has("ip_auto_refresh_enabled")) setIpAutoRefreshEnabled(context, json.getBoolean("ip_auto_refresh_enabled"))
+            if (json.has("ip_auto_refresh_interval")) setIpAutoRefreshInterval(context, json.getInt("ip_auto_refresh_interval"))
+            if (json.has("hotshare_wakelock_enabled")) setHotshareWakeLockEnabled(context, json.getBoolean("hotshare_wakelock_enabled"))
+            if (json.has("vpn_wakelock_enabled")) setVpnWakeLockEnabled(context, json.getBoolean("vpn_wakelock_enabled"))
+            if (json.has("keep_alive_interval")) setKeepAliveInterval(context, json.getInt("keep_alive_interval"))
+            if (json.has("auto_clean_logs_enabled")) setAutoCleanLogsEnabled(context, json.getBoolean("auto_clean_logs_enabled"))
+            if (json.has("auto_clean_logs_interval")) setAutoCleanInterval(context, json.getInt("auto_clean_logs_interval"))
+            if (json.has("max_log_lines")) setMaxLogLines(context, json.getInt("max_log_lines"))
+
+            if (json.has("hev_mtu")) setHevMtu(context, json.getInt("hev_mtu"))
+            if (json.has("hev_multi_queue")) setHevMultiQueue(context, json.getBoolean("hev_multi_queue"))
+            if (json.has("hev_ipv4")) setHevIpv4(context, json.getString("hev_ipv4"))
+            if (json.has("hev_ipv6")) setHevIpv6(context, json.getString("hev_ipv6"))
+            if (json.has("hev_dns_port")) setHevDnsPort(context, json.getInt("hev_dns_port"))
+            if (json.has("hev_dns_address")) setHevDnsAddress(context, json.getString("hev_dns_address"))
+            if (json.has("hev_socks5_port")) setHevSocks5Port(context, json.getInt("hev_socks5_port"))
+            if (json.has("hev_socks5_address")) setHevSocks5Address(context, json.getString("hev_socks5_address"))
+            if (json.has("hev_socks5_udp")) setHevSocks5Udp(context, json.getString("hev_socks5_udp"))
+            if (json.has("hev_task_stack_size")) setHevTaskStackSize(context, json.getInt("hev_task_stack_size"))
+            if (json.has("hev_tcp_buffer_size")) setHevTcpBufferSize(context, json.getInt("hev_tcp_buffer_size"))
+            if (json.has("hev_udp_recv_buffer_size")) setHevUdpRecvBufferSize(context, json.getInt("hev_udp_recv_buffer_size"))
+            if (json.has("hev_udp_copy_buffer_nums")) setHevUdpCopyBufferNums(context, json.getInt("hev_udp_copy_buffer_nums"))
+            if (json.has("hev_max_session_count")) setHevMaxSessionCount(context, json.getInt("hev_max_session_count"))
+            if (json.has("hev_connect_timeout")) setHevConnectTimeout(context, json.getInt("hev_connect_timeout"))
+            if (json.has("hev_tcp_read_write_timeout")) setHevTcpReadWriteTimeout(context, json.getInt("hev_tcp_read_write_timeout"))
+            if (json.has("hev_udp_read_write_timeout")) setHevUdpReadWriteTimeout(context, json.getInt("hev_udp_read_write_timeout"))
+            if (json.has("hev_log_file")) setHevLogFile(context, json.getString("hev_log_file"))
+            if (json.has("hev_log_level")) setHevLogLevel(context, json.getString("hev_log_level"))
+
+            if (json.has("bypass_apps_list")) {
+                val array = json.getJSONArray("bypass_apps_list")
+                val bypassSet = mutableSetOf<String>()
+                for (i in 0 until array.length()) {
+                    bypassSet.add(array.getString(i))
+                }
+                setBypassApps(context, bypassSet)
+            }
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("VpnSettingsManager", "Error importing config", e)
+            false
+        }
+    }

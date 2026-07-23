@@ -15,6 +15,8 @@
 - [x] Audit dan pemetaan ukuran berkas source code untuk deteksi file gemuk - [2026-07-22 18:44]
 - [x] Hapus file `.github/workflows/build.yml` sesuai instruksi user - [2026-07-22 18:54]
 - [x] Tambah alur kerja `.github/workflows/gemini.yml` untuk AI Code Review - [2026-07-22 18:57]
+- [x] Refaktor total `SiVpnService.kt` (755 baris -> 366 baris) dengan memisahkan logika ke `VpnNotificationManager`, `VpnInterfaceConfigurator`, `VpnMonitors`, dan `HevTunnelConfigurator` - [2026-07-23 02:51]
+- [x] Refaktor total `VpnSettingsManager.kt` (650 baris -> 133 baris) dengan memisahkan fungsi ekspor/impor JSON ke `ConfigRepository` dan memadatkan getters/setters. - [2026-07-23 02:56]
 
 ## Pending Queue
 - [ ] Menunggu konfirmasi dan instruksi selanjutnya dari user.

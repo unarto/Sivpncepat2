@@ -54,8 +54,8 @@ class SettingsRepository(private val context: Context) {
     fun getSplitTunnelingEnabled(): Boolean = VpnSettingsManager.getSplitTunnelingEnabled(context)
     fun setSplitTunnelingEnabled(enabled: Boolean) = VpnSettingsManager.setSplitTunnelingEnabled(context, enabled)
 
-    fun getAppsFilterMode(): Int = VpnSettingsManager.getAppsFilterMode(context)
-    fun setAppsFilterMode(mode: Int) = VpnSettingsManager.setAppsFilterMode(context, mode)
+    fun getAppsFilterMode(): String = VpnSettingsManager.getAppsFilterMode(context)
+    fun setAppsFilterMode(mode: String) = VpnSettingsManager.setAppsFilterMode(context, mode)
 
     fun getBypassApps(): Set<String> = VpnSettingsManager.getBypassApps(context)
     fun setBypassApps(apps: Set<String>) = VpnSettingsManager.setBypassApps(context, apps)
@@ -63,8 +63,8 @@ class SettingsRepository(private val context: Context) {
     fun getKillSwitchEnabled(): Boolean = VpnSettingsManager.getKillSwitchEnabled(context)
     fun setKillSwitchEnabled(enabled: Boolean) = VpnSettingsManager.setKillSwitchEnabled(context, enabled)
 
-    fun getForcingTls(): Boolean = VpnSettingsManager.getForcingTls(context)
-    fun setForcingTls(enabled: Boolean) = VpnSettingsManager.setForcingTls(context, enabled)
+    fun getForcingTls(): String = VpnSettingsManager.getForcingTls(context)
+    fun setForcingTls(enabled: String) = VpnSettingsManager.setForcingTls(context, enabled)
 
     fun getSpeedometerEnabled(): Boolean = VpnSettingsManager.getSpeedometerEnabled(context)
     fun setSpeedometerEnabled(enabled: Boolean) = VpnSettingsManager.setSpeedometerEnabled(context, enabled)
