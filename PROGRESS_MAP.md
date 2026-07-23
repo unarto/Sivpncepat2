@@ -9,6 +9,10 @@
 - [x] Analisis logika native C `libssh2+mbedtls` dan implementasi pemetaan return code error di JNI Wrapper `SiVpnService.kt` (Strict SRP & Fail-Fast) - [2026-07-22 04:15]
 - [x] Analisis RFC & Source Code libssh2 terkait proxy response drop, serta perbaikan presisi logika tag payload injector `PayloadInjector.kt` - [2026-07-22 04:26]
 - [x] Identifikasi file raksasa `MainActivity.kt` (4848 baris) untuk refaktorisasi UI dan State - [2026-07-22 04:30]
+- [x] Buat panduan arsitektur refaktor di `PANDUAN_REFACTOR.md` - [2026-07-22 18:30]
+- [x] Refaktor total `MainActivity.kt` (4848 baris -> 85 baris) menjadi modul terpisah MVVM + Clean Architecture - [2026-07-22 18:36]
+- [x] Pindahkan `PANDUAN_REFACTOR.md` ke direktori root workspace - [2026-07-22 18:42]
+- [x] Audit dan pemetaan ukuran berkas source code untuk deteksi file gemuk - [2026-07-22 18:44]
 
 ## Pending Queue
-- [ ] Refaktor `MainActivity.kt` menjadi modul-modul UI/State terpisah (menunggu instruksi GO).
+- [ ] Menunggu konfirmasi dan instruksi selanjutnya dari user.
