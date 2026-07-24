@@ -1,26 +1,20 @@
 package com.sivpn.cepat.vpn
 
 import kotlinx.coroutines.*
-import java.io.ByteArrayOutputStream
 import java.io.EOFException
-import java.io.IOException
-import java.io.InputStream
-import java.io.OutputStream
+import java.net.ConnectException
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
 import java.net.SocketTimeoutException
-import java.nio.ByteBuffer
-import java.nio.channels.Channels
-import java.security.SecureRandom
-import android.util.Base64
+import java.security.GeneralSecurityException
+import java.security.cert.CertificateException
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.SNIHostName
-import javax.net.ssl.SSLSocket
-import javax.net.ssl.SSLSocketFactory
+import javax.net.ssl.SSLException
+import javax.net.ssl.SSLHandshakeException
 
 enum class TunnelMode {
     TCP,
@@ -35,9 +29,10 @@ object PayloadInjector {
     var localPort = 0
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val clientJobs = mutableListOf<Job>()
+    private val activeSockets = mutableSetOf<Socket>()
     private var acceptJob: Job? = null
 
-    private const val BUFFER_SIZE = 32 * 1024
+    private const val BUFFER_SIZE = StreamForwarder.BUFFER_SIZE
     private const val CONNECT_TIMEOUT_MS = 10_000
     private const val HANDSHAKE_TIMEOUT_MS = 10_000
     private const val READ_TIMEOUT_MS = 0 // Infinite for long-lived tunnel
@@ -83,6 +78,7 @@ object PayloadInjector {
                     }
 
                     if (clientSocket != null) {
+                        registerSocket(clientSocket)
                         val job = launch {
                             handleClient(clientSocket, targetHost, targetPort, sshHost, sshPort, payload, sni, tlsVersion)
                         }
@@ -124,9 +120,20 @@ object PayloadInjector {
         
         val aJob = acceptJob
         acceptJob = null
+
+        val socketsToClose = synchronized(activeSockets) {
+            val list = activeSockets.toList()
+            activeSockets.clear()
+            list
+        }
+        socketsToClose.forEach {
+            StreamForwarder.gracefulClose(it)
+        }
         
         val jobsToCancel = synchronized(clientJobs) {
-            clientJobs.toList()
+            val list = clientJobs.toList()
+            clientJobs.clear()
+            list
         }
         
         scope.launch {
@@ -136,9 +143,30 @@ object PayloadInjector {
         }
     }
 
+    private fun registerSocket(socket: Socket) {
+        synchronized(activeSockets) {
+            activeSockets.add(socket)
+        }
+    }
+
+    private fun unregisterSocket(socket: Socket?) {
+        if (socket == null) return
+        synchronized(activeSockets) {
+            activeSockets.remove(socket)
+        }
+    }
+
     private fun determineMode(payload: String, sni: String): TunnelMode {
-        val isWs = payload.contains("websocket", ignoreCase = true)
-        val isSsl = sni.isNotEmpty()
+        val isSsl = sni.isNotBlank()
+        val lowerPayload = payload.lowercase(Locale.ENGLISH)
+
+        val hasUpgradeHeader = lowerPayload.contains("upgrade:") && lowerPayload.contains("websocket")
+        val hasConnectionHeader = lowerPayload.contains("connection:") && lowerPayload.contains("upgrade")
+        val hasWsKey = lowerPayload.contains("sec-websocket-key") || lowerPayload.contains("[websocket_key]")
+        val hasWsTags = lowerPayload.contains("[websocket_version]") || lowerPayload.contains("[websocket_extensions]")
+
+        val isWs = (hasUpgradeHeader && hasConnectionHeader) || hasWsKey || hasWsTags
+
         return when {
             isSsl && isWs -> TunnelMode.WSS
             isSsl -> TunnelMode.SSL
@@ -147,7 +175,16 @@ object PayloadInjector {
         }
     }
 
-    private suspend fun handleClient(clientSocket: Socket, remoteHost: String, remotePort: Int, sshHost: String, sshPort: Int, payload: String, sni: String, tlsVersion: String) = coroutineScope {
+    private suspend fun handleClient(
+        clientSocket: Socket,
+        remoteHost: String,
+        remotePort: Int,
+        sshHost: String,
+        sshPort: Int,
+        payload: String,
+        sni: String,
+        tlsVersion: String
+    ) = coroutineScope {
         var remoteSocket: Socket? = null
         var autoPingJob: Job? = null
         try {
@@ -178,37 +215,43 @@ object PayloadInjector {
                     LogManager.addLog("TCP Connected to $remoteHost:$remotePort")
 
                     if (mode == TunnelMode.SSL || mode == TunnelMode.WSS) {
-                        LogManager.addLog("Handshake Start (SNI: $sni)...")
-                        val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
-                        val sslSocket = factory.createSocket(sock, remoteHost, remotePort, true) as SSLSocket
-                        
-                        val params = sslSocket.sslParameters
-                        params.serverNames = listOf(SNIHostName(sni))
-                        
-                        if (tlsVersion != "Auto" && tlsVersion.isNotBlank()) {
-                            val supported = sslSocket.supportedProtocols
-                            if (supported.contains(tlsVersion)) {
-                                sslSocket.enabledProtocols = arrayOf(tlsVersion)
-                            }
-                        }
-                        sslSocket.sslParameters = params
-                        sslSocket.startHandshake()
-                        
+                        val sslSocket = SslEngine.connect(sock, remoteHost, remotePort, sni, tlsVersion)
                         sslSocket.soTimeout = READ_TIMEOUT_MS
                         remoteSocket = sslSocket
-                        LogManager.addLog("Handshake Success (SSL/TLS)")
+                        registerSocket(sslSocket)
                     } else {
                         sock.soTimeout = READ_TIMEOUT_MS
                         remoteSocket = sock
+                        registerSocket(sock)
                     }
                     connected = true
                 } catch (e: Exception) {
-                    retryCount++
                     try { remoteSocket?.close() } catch (ex: Exception) {}
-                    remoteSocket = null
+                    if (remoteSocket != null) {
+                        unregisterSocket(remoteSocket)
+                        remoteSocket = null
+                    }
+
+                    val isSslError = e is SSLException ||
+                            e is SSLHandshakeException ||
+                            e is CertificateException ||
+                            e is GeneralSecurityException
+
+                    val isRetryable = !isSslError && (
+                            e is SocketTimeoutException ||
+                            e is ConnectException ||
+                            e is SocketException ||
+                            e is EOFException
+                    )
+
+                    if (!isRetryable) {
+                        throw e
+                    }
+
+                    retryCount++
                     if (retryCount >= maxRetries) {
                         LogManager.addLog("Handshake Failed setelah $maxRetries percobaan.")
-                        throw Exception("Koneksi gagal: ${e.message}")
+                        throw Exception("Koneksi gagal: ${e.message}", e)
                     }
                     LogManager.addLog("Retry ($retryCount/$maxRetries) karena: ${e.message}")
                     delay(currentDelay)
@@ -217,183 +260,111 @@ object PayloadInjector {
             }
 
             val connectedSocket = remoteSocket ?: throw IllegalStateException("Remote socket belum siap")
+            val remoteOut = connectedSocket.outputStream
+            val remoteIn = connectedSocket.inputStream
 
             if (payload.isNotEmpty()) {
-                var parsedPayload = PayloadFormatter.formatPayload(payload, sshHost, sshPort)
+                val formattedPayload = HttpPayloadEngine.formatPayload(payload, sshHost, sshPort)
 
                 if (mode == TunnelMode.WS || mode == TunnelMode.WSS) {
-                    val secWsKey = generateWsKey()
-                    if (!parsedPayload.contains("Sec-WebSocket-Key", ignoreCase = true)) {
-                        val headersToInject = "Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: $secWsKey\r\n\r\n"
-                        if (parsedPayload.endsWith("\r\n\r\n")) {
-                            parsedPayload = parsedPayload.substring(0, parsedPayload.length - 2) + headersToInject
-                        } else if (parsedPayload.endsWith("\r\n")) {
-                            parsedPayload += headersToInject
-                        } else {
-                            parsedPayload += "\r\n" + headersToInject
-                        }
-                    }
+                    val (finalPayload, secWsKey) = WebSocketEngine.prepareWsPayload(formattedPayload)
                     
-                    connectedSocket.outputStream.write(parsedPayload.toByteArray())
-                    connectedSocket.outputStream.flush()
+                    HttpPayloadEngine.injectPayload(finalPayload, remoteOut)
                     
-                    if (!readWsHandshakeResponse(connectedSocket.inputStream)) {
+                    connectedSocket.soTimeout = HANDSHAKE_TIMEOUT_MS
+                    val handshakeOk = WebSocketEngine.readWsHandshakeResponse(remoteIn, secWsKey)
+                    connectedSocket.soTimeout = READ_TIMEOUT_MS
+
+                    if (!handshakeOk) {
                         throw Exception("Invalid WebSocket Handshake Response (Gagal verifikasi RFC 6455)")
                     }
                     LogManager.addLog("WS Connected (Handshake 101 sukses)")
                     
-                    autoPingJob = startAutoPing(connectedSocket.outputStream)
+                    autoPingJob = WebSocketEngine.startAutoPing(remoteOut, this)
                 } else {
-                    connectedSocket.outputStream.write(parsedPayload.toByteArray())
-                    connectedSocket.outputStream.flush()
+                    HttpPayloadEngine.injectPayload(formattedPayload, remoteOut)
                 }
             }
 
             if (mode == TunnelMode.WS || mode == TunnelMode.WSS) {
                 val clientToRemote = launch { 
                     try {
-                        WebSocketFramer.forwardWsEncode(clientSocket.inputStream, connectedSocket.outputStream)
+                        WebSocketEngine.forwardWsEncode(clientSocket.inputStream, remoteOut)
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
-                        // ignore
+                        // ignore IO break
                     }
                 }
                 val remoteToClient = launch { 
                     try {
-                        WebSocketFramer.forwardWsDecode(connectedSocket.inputStream, clientSocket.outputStream, connectedSocket.outputStream)
+                        WebSocketEngine.forwardWsDecode(remoteIn, clientSocket.outputStream, remoteOut)
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
-                        // ignore
+                        // ignore IO break
                     }
                 }
                 
-                clientToRemote.invokeOnCompletion { remoteToClient.cancel() }
-                remoteToClient.invokeOnCompletion { clientToRemote.cancel() }
+                clientToRemote.invokeOnCompletion { 
+                    remoteToClient.cancel()
+                    StreamForwarder.gracefulClose(clientSocket)
+                    StreamForwarder.gracefulClose(connectedSocket)
+                }
+                remoteToClient.invokeOnCompletion { 
+                    clientToRemote.cancel()
+                    StreamForwarder.gracefulClose(clientSocket)
+                    StreamForwarder.gracefulClose(connectedSocket)
+                }
                 
                 joinAll(clientToRemote, remoteToClient)
                 LogManager.addLog("WS Closed")
             } else {
-                val bufferPool1 = ByteBuffer.allocateDirect(BUFFER_SIZE)
-                val bufferPool2 = ByteBuffer.allocateDirect(BUFFER_SIZE)
+                val buffer1 = ByteArray(BUFFER_SIZE)
+                val buffer2 = ByteArray(BUFFER_SIZE)
 
                 val clientToRemote = launch { 
                     try {
-                        forwardStream(clientSocket.inputStream, connectedSocket.outputStream, bufferPool1)
+                        StreamForwarder.forwardStream(clientSocket.inputStream, remoteOut, buffer1)
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
-                        // ignore
+                        // ignore IO break
                     }
                 }
                 val remoteToClient = launch { 
                     try {
-                        forwardStream(connectedSocket.inputStream, clientSocket.outputStream, bufferPool2)
+                        StreamForwarder.forwardStream(remoteIn, clientSocket.outputStream, buffer2)
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
-                        // ignore
+                        // ignore IO break
                     }
                 }
                 
-                clientToRemote.invokeOnCompletion { remoteToClient.cancel() }
-                remoteToClient.invokeOnCompletion { clientToRemote.cancel() }
+                clientToRemote.invokeOnCompletion { 
+                    remoteToClient.cancel()
+                    StreamForwarder.gracefulClose(clientSocket)
+                    StreamForwarder.gracefulClose(connectedSocket)
+                }
+                remoteToClient.invokeOnCompletion { 
+                    clientToRemote.cancel()
+                    StreamForwarder.gracefulClose(clientSocket)
+                    StreamForwarder.gracefulClose(connectedSocket)
+                }
                 
                 joinAll(clientToRemote, remoteToClient)
             }
         } catch (e: CancellationException) {
-            // Ignored
+            throw e
         } catch (e: Exception) {
             LogManager.addLog("PayloadInjector error: ${e.message}")
         } finally {
             autoPingJob?.cancel()
-            gracefulClose(clientSocket)
-            gracefulClose(remoteSocket)
+            unregisterSocket(clientSocket)
+            unregisterSocket(remoteSocket)
+            StreamForwarder.gracefulClose(clientSocket)
+            StreamForwarder.gracefulClose(remoteSocket)
         }
-    }
-
-    private fun startAutoPing(output: OutputStream): Job {
-        return scope.launch {
-            while (isActive) {
-                delay(30_000)
-                try {
-                    val mKey = ByteArray(4)
-                    SecureRandom().nextBytes(mKey)
-                    val pingHeader = byteArrayOf(0x89.toByte(), 0x80.toByte(), mKey[0], mKey[1], mKey[2], mKey[3])
-                    synchronized(output) {
-                        output.write(pingHeader)
-                        output.flush()
-                    }
-                } catch (e: Exception) {
-                    break
-                }
-            }
-        }
-    }
-
-    private fun generateWsKey(): String {
-        val bytes = ByteArray(16)
-        SecureRandom().nextBytes(bytes)
-        return Base64.encodeToString(bytes, Base64.NO_WRAP)
-    }
-
-    private fun readWsHandshakeResponse(input: InputStream): Boolean {
-        val headerBytes = ByteArrayOutputStream()
-        var last4 = 0
-        while (true) {
-            val b = input.read()
-            if (b == -1) return false
-            headerBytes.write(b)
-            last4 = ((last4 shl 8) or b) and 0xFFFFFFFF.toInt()
-            if (last4 == 0x0D0A0D0A) {
-                break
-            }
-        }
-        val headers = headerBytes.toString("UTF-8")
-        val lines = headers.split("\r\n")
-        if (lines.isEmpty() || !lines[0].contains("101")) return false
-        
-        var hasUpgrade = false
-        var hasConnection = false
-        var hasAccept = false
-        
-        for (line in lines) {
-            val lower = line.lowercase(Locale.ENGLISH)
-            if (lower.startsWith("upgrade:") && lower.contains("websocket")) hasUpgrade = true
-            if (lower.startsWith("connection:") && lower.contains("upgrade")) hasConnection = true
-            if (lower.startsWith("sec-websocket-accept:")) hasAccept = true
-        }
-        
-        return hasUpgrade && hasConnection && hasAccept
-    }
-
-    
-
-    
-
-    private fun forwardStream(input: InputStream, output: OutputStream, buffer: ByteBuffer) {
-        var inputChannel: java.nio.channels.ReadableByteChannel? = null
-        var outputChannel: java.nio.channels.WritableByteChannel? = null
-        try {
-            inputChannel = Channels.newChannel(input)
-            outputChannel = Channels.newChannel(output)
-
-            while (inputChannel.read(buffer) != -1) {
-                buffer.flip()
-                while (buffer.hasRemaining()) {
-                    outputChannel.write(buffer)
-                }
-                buffer.clear()
-            }
-        } finally {
-            try { inputChannel?.close() } catch (e: Exception) {}
-            try { outputChannel?.close() } catch (e: Exception) {}
-        }
-    }
-
-    private fun gracefulClose(socket: Socket?) {
-        if (socket == null || socket.isClosed) return
-        try {
-            if (!socket.isInputShutdown) socket.shutdownInput()
-        } catch (e: Exception) {}
-        try {
-            if (!socket.isOutputShutdown) socket.shutdownOutput()
-        } catch (e: Exception) {}
-        try {
-            socket.close()
-        } catch (e: Exception) {}
     }
 }

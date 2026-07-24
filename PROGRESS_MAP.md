@@ -29,6 +29,17 @@
 - [x] Memperbarui `Theme.kt` dan `Color.kt` menggunakan skema palet VPN modern (Deep Teal / Blue) dengan dukungan kompatibilitas Material 3 *dynamic color* - [2026-07-23 12:00]
 - [x] Menyempurnakan `VpnSettingsManager.kt` dengan internal string keys object, optimalisasi thread-safety MMKV, dan validasi nilai numerik secara komprehensif. - [2026-07-23 12:10]
 - [x] Melakukan Audit Fitur Jaringan Tingkat Lanjut (Advanced Networking Feature Audit) pada seluruh stack (`libssh2`, `mbedTLS`, `hev-socks5-tunnel`, `Android VpnService`) dan menambahkannya ke `AUDIT.md`. - [2026-07-23 13:50]
+- [x] Memperbarui konfigurasi `.github/workflows/gemini.yml` untuk penyesuaian model Gemini (`gemini-2.5-flash`). - [2026-07-23 16:20]
+- [x] Refaktor dan penyempurnaan `PayloadFormatter.kt` dengan dukungan tag lengkap (case-insensitive, user-agent, netData, raw, split) dan penggantian substring aman. - [2026-07-23 17:30]
+- [x] Audit dan refactor lanjutan `PayloadFormatter.kt` (Android API 24+ android.util.Base64, validasi Host strict require(), format IPv6 RFC [ip]:port, escape sequences \r\n \n\r \t \\, filtering random/rotate, Math.floorMod, SplitType metadata, thread-safe, single-pass algorithm & KotlinDoc) - [2026-07-23 17:55]
+- [x] Perbaikan Bug IPv6 host:port formatting & Eliminasi PayloadChunk kosong pada `PayloadFormatter.kt` - [2026-07-23 18:02]
+- [x] Perbaikan Bug `PayloadInjector.kt`: Pelacakan `activeSockets` & eliminasi race condition `stop()`, penghilangan kebocoran resource/channel pada `forwardStream()`, perbaikan koordinasi `invokeOnCompletion` penutup socket untuk mencegah deadlock `joinAll()`, penyaringan ketat `SSLException`/`SSLHandshakeException` pada loop retry, serta penguraian `readWsHandshakeResponse` dengan toleransi CRLF/LF. - [2026-07-23 18:28]
+- [x] Refaktor Arsitektur Koneksi Modular: Pemisahan `PayloadInjector.kt` (Orchestrator) ke dalam modul engine SRP (`SslEngine.kt`, `HttpPayloadEngine.kt`, `WebSocketEngine.kt`, `SquidProxyEngine.kt`, dan `StreamForwarder.kt`). - [2026-07-23 19:12]
+- [x] Refaktor & Penyempurnaan `HttpPayloadEngine.kt`: Parser response HTTP, validasi status HTTP (200, 101, 301, 302, 307, 400, 403, 404, 407, 500, 502, 503, 504), pembuat otomatis CONNECT request, dukungan Proxy-Authorization Basic, logging HTTP, dan pemisahan fungsi modular (`buildPayload`, `sendPayload`, `readResponse`, `parseResponse`, `validateResponse`). - [2026-07-23 19:37]
+- [x] Konfigurasi Alur Kerja GitHub Actions: Menghapus trigger otomatis (`push` & `pull_request`) di seluruh file workflow (`build-bebas-merdeka.yml`, `buildlissh.yml`, `gemini.yml`), sehingga eksekusi workflow HANYA berjalan secara manual via `workflow_dispatch` untuk menghemat kuota runner. - [2026-07-23 19:41]
 
 ## Pending Queue
-- [ ] Menunggu instruksi lanjutan dari user terkait integrasi layanan VPN atau penambahan fitur baru.
+- [ ] Fix bug parsing IPv6 host/port pada `SshParser.kt` & `ProxyParser.kt` (mencegah pemotongan string IPv6 berformat `[ip]:port`).
+- [ ] Fix logika retry pendaftaran `VpnInterface` pada `SiVpnService.kt` jika `setupVpnInterface()` melempar Exception/SecurityException saat rekoneksi.
+- [ ] Fix handling response code HTTP != 200 pada `PublicIpMonitor.kt` saat fetch IP publik (mencegah `FileNotFoundException` unhandled).
+- [ ] Tambahkan sanitasi input `trim()` pada string dialog input (`SshDialog.kt`, `ProxyDialog.kt`, `PayloadDialog.kt`) sebelum disimpan ke repository.

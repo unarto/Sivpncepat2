@@ -2,18 +2,6 @@ name: Build libssh2 Android
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'compile-libssh2.sh'
-      - 'app/src/main/cpp/**'
-      - 'libssh2/**'
-      - '.github/workflows/buildlissh.yml'
-  pull_request:
-    paths:
-      - 'compile-libssh2.sh'
-      - 'app/src/main/cpp/**'
-      - 'libssh2/**'
-      - '.github/workflows/buildlissh.yml'
 
 jobs:
   build-libssh2:
